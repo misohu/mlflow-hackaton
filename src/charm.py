@@ -269,7 +269,7 @@ class MlflowCharm(CharmBase):
             raise ValueError(f"Expected string, got {type(value)}")
 
         # Remove potentially dangerous characters, keeping only alphanumerics, hyphens, dots
-        sanitized = re.sub(r"[^\w\-\.]", "", value)
+        sanitized = re.sub(r"[^a-zA-Z0-9\-\.]", "", value)
         if not sanitized:
             raise ValueError("Value became empty after sanitization")
 

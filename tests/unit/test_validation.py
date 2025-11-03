@@ -484,5 +484,15 @@ class TestInputSanitization:
     def test_sanitize_for_url_preserves_safe_chars(self, harness: Harness):
         """Test URL sanitization preserves alphanumeric, hyphens, and dots."""
         harness.begin()
-        result = harness.charm._sanitize_for_url("my-service_123.test")
-        assert result == "my-service_123.test"
+        result = harness.charm._sanitize_for_url("my-service.123-test")
+        assert result == "my-service.123-test"
+
+    @patch(
+        "charm.KubernetesServicePatch",
+        lambda x, y, service_name, service_type, refresh_event: None,
+    )
+    def test_sanitize_for_url_removes_underscores(self, harness: Harness):
+        """Test URL sanitization removes underscores."""
+        harness.begin()
+        result = harness.charm._sanitize_for_url("my_service_name")
+        assert result == "myservicename"
