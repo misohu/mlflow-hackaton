@@ -4,6 +4,7 @@
 #
 
 import logging
+import re
 from pathlib import Path
 
 import botocore.exceptions
@@ -150,6 +151,130 @@ class MlflowCharm(CharmBase):
             )
         return self._poddefaults_manifests_wrapper
 
+    def _validate_config(self):
+        """Validate charm configuration parameters."""
+        config = self.model.config
+
+        # Port range validation
+        ports = {
+            "mlflow_port": config["mlflow_port"],
+            "mlflow_prometheus_exporter_port": config["mlflow_prometheus_exporter_port"],
+            "mlflow_nodeport": config["mlflow_nodeport"],
+            "mlflow_prometheus_exporter_nodeport": config["mlflow_prometheus_exporter_nodeport"],
+        }
+
+        for port_name, port_value in ports.items():
+            if not (1024 <= port_value <= 65535):
+                raise ErrorWithStatus(
+                    f"Invalid {port_name}: {port_value}. Must be between 1024-65535",
+                    BlockedStatus,
+                )
+
+        # Port conflict validation
+        if config["enable_mlflow_nodeport"]:
+            if config["mlflow_nodeport"] == config["mlflow_prometheus_exporter_nodeport"]:
+                raise ErrorWithStatus(
+                    "NodePort conflict: mlflow_nodeport and mlflow_prometheus_exporter_nodeport "
+                    "cannot be the same",
+                    BlockedStatus,
+                )
+
+        # Bucket name validation (early check)
+        if not validate_s3_bucket_name(config["default_artifact_root"]):
+            raise ErrorWithStatus(
+                f"Invalid default_artifact_root: '{config['default_artifact_root']}'. "
+                f"Must be a valid S3 bucket name",
+                BlockedStatus,
+            )
+
+    def _validate_database_data(self, db_data):
+        """Validate database relation data."""
+        required_fields = ["host", "port", "username", "password"]
+
+        for field in required_fields:
+            if field not in db_data:
+                raise ErrorWithStatus(
+                    f"Missing or empty required database field: {field}", WaitingStatus
+                )
+            # Check for empty strings
+            if isinstance(db_data[field], str) and not db_data[field]:
+                raise ErrorWithStatus(
+                    f"Missing or empty required database field: {field}", WaitingStatus
+                )
+
+        # Port validation
+        try:
+            port = int(db_data["port"])
+            if not (1 <= port <= 65535):
+                raise ValueError("Port out of range")
+        except (ValueError, TypeError):
+            raise ErrorWithStatus(
+                f"Invalid database port: {db_data['port']}. Must be a valid port number",
+                BlockedStatus,
+            )
+
+        # Basic hostname validation
+        if not re.match(r"^[a-zA-Z0-9\-\.]+$", db_data["host"]):
+            raise ErrorWithStatus(f"Invalid database host: {db_data['host']}", BlockedStatus)
+
+    def _validate_object_storage_data(self, storage_data):
+        """Validate object storage relation data."""
+        required_fields = ["service", "port", "access-key", "secret-key"]
+
+        for field in required_fields:
+            if field not in storage_data:
+                raise ErrorWithStatus(
+                    f"Missing or empty required object storage field: {field}", WaitingStatus
+                )
+            # Check for empty strings, but allow 0 for port (we'll validate range separately)
+            if isinstance(storage_data[field], str) and not storage_data[field]:
+                raise ErrorWithStatus(
+                    f"Missing or empty required object storage field: {field}", WaitingStatus
+                )
+
+        # Port validation
+        try:
+            port = int(storage_data["port"])
+            if not (1 <= port <= 65535):
+                raise ValueError("Port out of range")
+        except (ValueError, TypeError):
+            raise ErrorWithStatus(
+                f"Invalid object storage port: {storage_data['port']}", BlockedStatus
+            )
+
+        # Service name validation (used in URL construction)
+        if not re.match(r"^[a-zA-Z0-9\-\.]+$", storage_data["service"]):
+            raise ErrorWithStatus(
+                f"Invalid object storage service name: {storage_data['service']}", BlockedStatus
+            )
+
+        # Namespace validation (if present, used in URL construction)
+        if "namespace" in storage_data and storage_data["namespace"]:
+            if not re.match(r"^[a-zA-Z0-9\-\.]+$", storage_data["namespace"]):
+                raise ErrorWithStatus(
+                    f"Invalid object storage namespace: {storage_data['namespace']}",
+                    BlockedStatus,
+                )
+
+        # Secure field validation
+        if "secure" in storage_data and storage_data["secure"] not in [True, False]:
+            raise ErrorWithStatus(
+                f"Invalid 'secure' field: {storage_data['secure']}. Must be boolean",
+                BlockedStatus,
+            )
+
+    def _sanitize_for_url(self, value):
+        """Sanitize string values for URL construction."""
+        if not isinstance(value, str):
+            raise ValueError(f"Expected string, got {type(value)}")
+
+        # Remove potentially dangerous characters, keeping only alphanumerics, hyphens, dots
+        sanitized = re.sub(r"[^a-zA-Z0-9\-\.]", "", value)
+        if not sanitized:
+            raise ValueError("Value became empty after sanitization")
+
+        return sanitized
+
     def _create_service(self):
         """Create k8s service based on charm'sconfig."""
         if self.config["enable_mlflow_nodeport"]:
@@ -286,6 +411,8 @@ class MlflowCharm(CharmBase):
                 raise ErrorWithStatus(
                     "Incorrect data found in relation relational-db", WaitingStatus
                 )
+            # Validate the database data
+            self._validate_database_data(db_data)
             return db_data
         raise ErrorWithStatus("Waiting for relational-db relation data", WaitingStatus)
 
@@ -306,6 +433,8 @@ class MlflowCharm(CharmBase):
                 BlockedStatus,
             )
 
+        # Validate the object storage data
+        self._validate_object_storage_data(obj_storage)
         return obj_storage
 
     def _on_get_minio_credentials(self, event):
@@ -438,6 +567,8 @@ class MlflowCharm(CharmBase):
         """Perform all required actions for the Charm."""
         try:
             self._check_leader()
+            # Validate configuration early
+            self._validate_config()
             interfaces = self._get_interfaces()
             object_storage_data = self._get_object_storage_data(interfaces)
             relational_db_data = self._get_relational_db_data()
