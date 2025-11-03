@@ -242,6 +242,20 @@ class MlflowCharm(CharmBase):
                 f"Invalid object storage port: {storage_data['port']}", BlockedStatus
             )
 
+        # Service name validation (used in URL construction)
+        if not re.match(r"^[a-zA-Z0-9\-\.]+$", storage_data["service"]):
+            raise ErrorWithStatus(
+                f"Invalid object storage service name: {storage_data['service']}", BlockedStatus
+            )
+
+        # Namespace validation (if present, used in URL construction)
+        if "namespace" in storage_data and storage_data["namespace"]:
+            if not re.match(r"^[a-zA-Z0-9\-\.]+$", storage_data["namespace"]):
+                raise ErrorWithStatus(
+                    f"Invalid object storage namespace: {storage_data['namespace']}",
+                    BlockedStatus,
+                )
+
         # Secure field validation
         if "secure" in storage_data and storage_data["secure"] not in [True, False]:
             raise ErrorWithStatus(

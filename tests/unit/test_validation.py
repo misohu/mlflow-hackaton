@@ -1,7 +1,7 @@
 # Copyright 2023 Canonical Ltd.
 # See LICENSE file for licensing details.
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 from charmed_kubeflow_chisme.exceptions import ErrorWithStatus
@@ -373,6 +373,60 @@ class TestObjectStorageValidation:
             "access-key": "minioadmin",
             "secret-key": "minioadmin123",
             # secure is optional
+        }
+        # Should not raise any exception
+        harness.charm._validate_object_storage_data(storage_data)
+
+    @patch(
+        "charm.KubernetesServicePatch",
+        lambda x, y, service_name, service_type, refresh_event: None,
+    )
+    def test_validate_object_storage_data_invalid_service_name(self, harness: Harness):
+        """Test object storage validation with invalid service name."""
+        harness.begin()
+        storage_data = {
+            "service": "minio@invalid!",
+            "port": 9000,
+            "access-key": "minioadmin",
+            "secret-key": "minioadmin123",
+        }
+        with pytest.raises(ErrorWithStatus) as exc_info:
+            harness.charm._validate_object_storage_data(storage_data)
+        assert "Invalid object storage service name" in str(exc_info.value)
+        assert exc_info.value.status_type(BlockedStatus)
+
+    @patch(
+        "charm.KubernetesServicePatch",
+        lambda x, y, service_name, service_type, refresh_event: None,
+    )
+    def test_validate_object_storage_data_invalid_namespace(self, harness: Harness):
+        """Test object storage validation with invalid namespace."""
+        harness.begin()
+        storage_data = {
+            "service": "minio",
+            "namespace": "invalid@namespace!",
+            "port": 9000,
+            "access-key": "minioadmin",
+            "secret-key": "minioadmin123",
+        }
+        with pytest.raises(ErrorWithStatus) as exc_info:
+            harness.charm._validate_object_storage_data(storage_data)
+        assert "Invalid object storage namespace" in str(exc_info.value)
+        assert exc_info.value.status_type(BlockedStatus)
+
+    @patch(
+        "charm.KubernetesServicePatch",
+        lambda x, y, service_name, service_type, refresh_event: None,
+    )
+    def test_validate_object_storage_data_valid_service_and_namespace(self, harness: Harness):
+        """Test object storage validation with valid service and namespace."""
+        harness.begin()
+        storage_data = {
+            "service": "minio-service",
+            "namespace": "my-namespace",
+            "port": 9000,
+            "access-key": "minioadmin",
+            "secret-key": "minioadmin123",
         }
         # Should not raise any exception
         harness.charm._validate_object_storage_data(storage_data)
