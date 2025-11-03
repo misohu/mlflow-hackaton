@@ -43,7 +43,7 @@ RELATIONAL_DB_DATA = {
     "host": "host",
     "username": "username",
     "password": "lorem-ipsum",
-    "port": "port",
+    "port": "3306",
 }
 
 EXPECTED_ENVIRONMENT = {
@@ -52,7 +52,7 @@ EXPECTED_ENVIRONMENT = {
     "AWS_SECRET_ACCESS_KEY": "minio-super-secret-key",
     "DB_ROOT_PASSWORD": "lorem-ipsum",
     "MLFLOW_S3_ENDPOINT_URL": "http://service.namespace:1234",
-    "MLFLOW_TRACKING_URI": "mysql+pymysql://username:lorem-ipsum@host:port/mlflow",
+    "MLFLOW_TRACKING_URI": "mysql+pymysql://username:lorem-ipsum@host:3306/mlflow",
     "USE_SSL": "true",
 }
 
@@ -254,7 +254,7 @@ class TestCharm:
         fetch_relation_data = MagicMock()
         fetch_relation_data.return_value = {
             "test-db-data": {
-                "endpoints": "host:port",
+                "endpoints": "host:3306",
                 "username": "username",
                 "password": "password",
             }
@@ -267,7 +267,7 @@ class TestCharm:
         assert res == {
             "host": "host",
             "password": "password",
-            "port": "port",
+            "port": "3306",
             "username": "username",
         }
 
