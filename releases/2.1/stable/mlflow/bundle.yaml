@@ -1,0 +1,27 @@
+bundle: kubernetes
+name: mlflow
+docs: https://discourse.charmhub.io/t/mlflow-docs-index/10836
+applications:
+  mlflow-minio:
+    charm: minio
+    channel: ckf-1.7/stable
+    scale: 1
+    trust: true
+    _github_repo_name: minio-operator
+  mlflow-mysql:
+    charm: mysql-k8s
+    # We should use `8.0/stable` once changes for
+    # https://github.com/canonical/mysql-k8s-operator/issues/337 are published there.
+    channel: 8.0/edge
+    scale: 1
+    trust: true
+    _github_repo_name: mysql-k8s-operator
+  mlflow-server:
+    charm: mlflow-server
+    channel: 2.1/stable
+    scale: 1
+    trust: true
+    _github_repo_name: mlflow-operator
+relations:
+- [mlflow-server, mlflow-minio]
+- [mlflow-server, mlflow-mysql]
